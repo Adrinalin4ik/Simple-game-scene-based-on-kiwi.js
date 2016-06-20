@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>New Tilemap Example</title>
+	<script src="kiwi.js"></script>
+</head>
+<body>
+
+<script>
+var state = new Kiwi.State('Play');
+
+
+//Preload the assets
+state.preload = function () {
+	this.addJSON( 'tilemap', 'assets/tilemaps/tilemap.json');
+	this.addSpriteSheet( 'tiles', 'assets/tilemaps/tileset.png', 32, 32 );
+	this.addSpriteSheet( 'character', 'assets/images/hero.png', 32, 48 );
+	this.addImage( 'background', 'assets/images/background.png' );
+};
+
+
+//Setup our game world
+state.create = function () {
+
+	//Create the background layer
+	this.background = new Kiwi.GameObjects.StaticImage( this, this.textures.background );
+	this.addChild( this.background );
+
+
+	//Create our character
+	this.character = new Kiwi.GameObjects.Sprite(this, this.textures.character, 0, 50);
+
+
+	//Add physics to the character
+	this.character.box.hitbox = new Kiwi.Geom.Rectangle( 0, 0, 32, 24 );
+	this.character.physics = this.character.components.add( new Kiwi.Components.ArcadePhysics( this.character, this.character.box ) );
+	//this.character.physics.acceleration.y = 77;
+	//this.character.physics.maxVelocity.y = 140;
+
+	//Create the characters animation
+	this.character.animation.add('walking_top', [ 12, 13, 14, 15], 0.1, true );
+	this.character.animation.add('walking_right', [ 8, 9, 10, 11], 0.1, true );
+	this.character.animation.add('walking_bottom', [ 0, 1, 2, 3], 0.1, true );
+	this.character.animation.add('walking_left', [ 4, 5, 6, 7], 0.1, true );
+
+
+
+
+	//Create the tilemap
+	this.tilemap = new Kiwi.GameObjects.Tilemap.TileMap(this, 'tilemap', this.textures.tiles);
+	console.log(this.tilemap.layers)
+	for( var i = 0; i < this.tilemap.layers.length; i++ ) {
+		this.addChild( this.tilemap.layers[ i ] );
+	}
+
+	for(var i = 1; i < this.tilemap.tileTypes.length; i++) {
+		this.tilemap.tileTypes[i].allowCollisions = Kiwi.Components.ArcadePhysics.ANY  ;
+	}
+
+
+	//Add the key controls to the character
+	this.step = 3;
+
+	this.upKey = this.game.input.keyboard.addKey( Kiwi.Input.Keycodes.W, true );
+	this.downKey = this.game.input.keyboard.addKey( Kiwi.Input.Keycodes.S, true );
+	this.rightKey = this.game.input.keyboard.addKey( Kiwi.Input.Keycodes.D, true );
+	this.leftKey = this.game.input.keyboard.addKey( Kiwi.Input.Keycodes.A, true );
+
+	//Prevent the down key from scrolling the page
+	this.keyboard = this.game.input.keyboard;
+	//this.keyboard.addKey(Kiwi.Input.Keycodes.S, true);
+
+	//this.keyboard.onKeyDownOnce.add(this.keyDownOnce, this);
+	this.keyboard.onKeyUp.add(this.keyUp, this);
+	//Add to the screen.
+	this.addChild(this.character);
+}
+
+
+state.update = function () {
+	//Update all the gameobjects
+	Kiwi.State.prototype.update.call(this);
+
+	//Update physics
+	this.checkCollision();
+
+	this.updateCharacterMovement();
+	//this.updateCharacterAnimation();
+
+	//this.resetCharacter();
+}
+
+
+//Resolve collisions between the character and the first layer.
+state.checkCollision = function () {
+	this.tilemap.layers[1].physics.overlapsTiles( this.character, true );
+}
+
+
+//Updated the characters velocities
+state.updateCharacterMovement = function () {
+	if( this.leftKey.isDown ){
+		this.character.x -= this.step;
+		//this.character.physics.velocity.x = -40;
+		if 	(!this.character.animation.isPlaying){
+				this.character.animation.play('walking_left',false);
+			}
+	}
+	if( this.rightKey.isDown ){
+		this.character.x += this.step;
+		//this.character.physics.velocity.x = 40;
+		if 	(!this.character.animation.isPlaying){
+			this.character.animation.play('walking_right',false);
+		}
+	}
+	if( this.upKey.isDown ){
+		this.character.y -= this.step;
+	 //this.character.physics.velocity.y = -40;
+	 if 	(!this.character.animation.isPlaying){
+	 	this.character.animation.play('walking_top',false);
+	 }
+	}
+	if( this.downKey.isDown ){
+		this.character.y += this.step;
+	  //this.character.physics.velocity.y = 40;
+		if 	(!this.character.animation.isPlaying){
+			this.character.animation.play('walking_bottom',false);
+		}
+	}
+	var playerOffsetX = this.character.width * 0.5;
+	var playerOffsetY = this.character.height * 0.5;
+	// Set the cameras position to that of the player.
+	this.game.cameras.defaultCamera.transform.x = -1 * this.character.x + this.game.stage.width * 0.5 - playerOffsetX;
+	this.game.cameras.defaultCamera.transform.y = -1 * this.character.y + this.game.stage.height * 0.5 - playerOffsetY;
+}
+
+//Changes the characters animation to match what he is doing
+state.updateCharacterAnimation = function () {
+
+	//Are we in the air?
+	if( !this.character.physics.isTouching( Kiwi.Components.ArcadePhysics.DOWN ) ) {
+
+		//Are we going down or up?
+		if( this.character.physics.velocity.y > 0 ) {
+			this.character.animation.play('fall', false);
+		} else {
+			this.character.animation.play('jump', false);
+		}
+
+	} else if ( this.rightPressed || this.leftPressed ){
+		this.character.animation.play('walking', false);
+
+	} else {
+		this.character.animation.play('idle', false);
+
+	}
+
+}
+
+
+//Check to see if the character has fallen and needs to reset
+state.resetCharacter = function() {
+
+	if( this.character.y > this.game.stage.height + this.game.stage.height / 2 ) {
+		this.character.y = 24;
+		this.character.x = 0;
+		this.character.physics.velocity.y = 0;
+	}
+
+}
+
+
+//When the key is pressed
+state.keyDownOnce = function(keyCode, key) {
+	if( keyCode === this.rightKey.keyCode ){
+		this.rightPressed = true;
+	}
+
+	if( keyCode === this.leftKey.keyCode ){
+		this.leftPressed = true;
+	}
+
+	if( keyCode === this.jumpKey.keyCode ){
+		this.jumpPressed = true;
+	}
+}
+
+
+//When the key is released
+state.keyUp = function(keyCode, key) {
+
+	this.character.animation.stop()
+	//if( keyCode === this.rightKey.keyCode ){
+	//	this.rightPressed = false;
+//	}
+
+
+}
+
+
+//Create the game.
+var gameOptions = {
+	width: 768,
+	height: 512
+};
+
+var game = new Kiwi.Game('game-container', 'Tilemap with Arcade Physics', state, gameOptions);
+
+</script>
+
+</body>
+</html>
